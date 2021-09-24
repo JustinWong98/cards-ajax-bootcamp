@@ -112,23 +112,54 @@ export default function initGamesController(db) {
     // deal out a new shuffled deck for this game.
     const cardDeck = shuffleCards(makeDeck());
     const playerHand = [cardDeck.pop(), cardDeck.pop()];
+    const player2Hand = [cardDeck.pop(), cardDeck.pop()];
+    const player1Score = 0;
+    const player2Score = 0;
+    const player1 = await db.User.findOne({
+      where: {
+        id: request.cookies.id,
+      },
+    });
+
+    const players = await db.User.findAll();
+    console.log(players);
+
+    let randomID = 0;
+    let diffPlayer = false;
+    while (!diffPlayer) {
+      randomID = Math.floor(Math.random() * players.length) + 1;
+      if (randomID !== request.cookies.id) {
+        diffPlayer = true;
+      }
+    }
+    const player2 = await db.User.findOne({
+      where: {
+        id: randomID,
+      },
+    });
 
     const newGame = {
       gameState: {
         cardDeck,
         playerHand,
+        player2Hand,
+        player1Score,
+        player2Score,
+        player1,
+        player2,
       },
     };
 
     try {
       // run the DB INSERT query
       const game = await db.Game.create(newGame);
-
+      console.log(game);
       // send the new game back to the user.
       // dont include the deck so the user can't cheat
       response.send({
         id: game.id,
         playerHand: game.gameState.playerHand,
+        player2Hand: game.gameState.player2Hand,
       });
     } catch (error) {
       response.status(500).send(error);
@@ -140,24 +171,83 @@ export default function initGamesController(db) {
     try {
       // get the game by the ID passed in the request
       const game = await db.Game.findByPk(request.params.id);
-
+      console.log(game);
       // make changes to the object
       const playerHand = [game.gameState.cardDeck.pop(), game.gameState.cardDeck.pop()];
+      const player2Hand = [game.gameState.cardDeck.pop(), game.gameState.cardDeck.pop()];
 
-      // update the game with the new info
-      await game.update({
-        gameState: {
-          cardDeck: game.gameState.cardDeck,
-          playerHand,
-        },
-
+      let { player1Score } = game.gameState;
+      let { player2Score } = game.gameState;
+      let player1HighCard = 0;
+      playerHand.forEach((card) => {
+        if (card.rank > player1HighCard) {
+          player1HighCard = card.rank;
+        }
       });
+
+      // make changes to the object
+      let player2HighCard = 0;
+      player2Hand.forEach((card) => {
+        if (card.rank > player2HighCard) {
+          player2HighCard = card.rank;
+        }
+      });
+      let whichPlayerWon = '';
+      if (player1HighCard > player2HighCard) {
+        whichPlayerWon = '1';
+        player1Score += 1;
+      }
+      else if (player2HighCard > player1HighCard) {
+        whichPlayerWon = '2';
+        player2Score += 1;
+      }
+      else {
+        whichPlayerWon = 'neither';
+      }
+
+      let gameEnded = false;
+      if (player1Score === 3) {
+        gameEnded = true;
+        const winnerID = game.gameState.player1.id;
+        console.log(winnerID);
+        await game.update({
+          winner_id: winnerID,
+        });
+      }
+      else if (player2Score === 3) {
+        gameEnded = true;
+        const winnerID = game.gameState.player2.id;
+        console.log(winnerID);
+        await game.update({
+          winner_id: winnerID,
+        });
+      }
+      else {
+      // update the game with the new info
+        await game.update({
+          gameState: {
+            cardDeck: game.gameState.cardDeck,
+            playerHand,
+            player2Hand,
+            player1Score,
+            player2Score,
+            player1: game.gameState.player1,
+            player2: game.gameState.player2,
+          },
+
+        });
+      }
 
       // send the updated game back to the user.
       // dont include the deck so the user can't cheat
       response.send({
         id: game.id,
         playerHand: game.gameState.playerHand,
+        player2Hand: game.gameState.player2Hand,
+        player1Score,
+        player2Score,
+        whichPlayerWon,
+        gameEnded,
       });
     } catch (error) {
       response.status(500).send(error);

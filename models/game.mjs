@@ -9,6 +9,13 @@ export default function gameModel(sequelize, DataTypes) {
     gameState: {
       type: DataTypes.JSON,
     },
+    winner_id: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+    },
     createdAt: {
       allowNull: false,
       type: DataTypes.DATE,
